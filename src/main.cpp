@@ -134,6 +134,7 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData)
 
 			std::thread init_thread([bot_token, intents]()
 			{
+				unsigned int attempt = 0;
 				while (true)
 				{
 					std::this_thread::sleep_for(std::chrono::minutes(1));
@@ -141,7 +142,12 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData)
 					DestroyEverything();
 					InitializeEverything(bot_token, intents);
 					if (WaitForInitialization())
+					{
+						logprintf(" >> discord-connector: " PLUGIN_VERSION " loaded after %u retries.", ++attempt);
 						break;
+					}
+					++attempt;
+					logprintf(" >> discord-connector: init retry %u failed; retrying in 1 minute.", attempt);
 				}
 			});
 			init_thread.detach();

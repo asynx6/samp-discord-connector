@@ -111,6 +111,8 @@ private: // variables
 	bool _reconnect = false;
 	asio::steady_timer _reconnectTimer;
 	unsigned int _reconnectCount = 0;
+	unsigned int _invalidSessions = 0;
+	bool _warnedBadSession = false;
 
 	beast::multi_buffer _buffer;
 

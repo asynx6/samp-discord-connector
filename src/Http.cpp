@@ -1,10 +1,13 @@
 #include "Http.hpp"
 #include "Logger.hpp"
 #include "misc.hpp"
+#include "sdk.hpp"
 #include "version.hpp"
 
 #include <boost/asio/system_timer.hpp>
 #include <boost/beast/version.hpp>
+
+extern logprintf_t logprintf;
 
 Http::Http(std::string token) :
 	m_SslContext(asio::ssl::context::tlsv12_client),
@@ -78,7 +81,10 @@ void Http::NetworkThreadFunc()
 	bool skip_entry = false;
 	std::unordered_map<std::string, TimePoint_t> bucket_ratelimit;
 
-	if (!Connect())
+	while (m_NetworkThreadRunning && !Connect())
+		std::this_thread::sleep_for(std::chrono::seconds(2));
+
+	if (!m_NetworkThreadRunning)
 		return;
 
 	while (m_NetworkThreadRunning)
@@ -151,13 +157,18 @@ void Http::NetworkThreadFunc()
 					{
 						// we failed to reconnect, discard this request
 						Logger::Get()->Log(samplog_LogLevel::WARNING, "Failed to send request, discarding");
+						logprintf(" >> discord-connector: giving up on request %s after %u retries",
+							entry->Request->target().to_string().c_str(), MaxRetries);
 						skip_entry = true;
 						break; // break out of do-while loop
 					}
 				}
 			} while (error_code);
 			if (skip_entry)
+			{
+				delete entry;
 				continue; // continue queue loop
+			}
 
 			auto it_r = response.find("X-RateLimit-Remaining");
 			if (it_r != response.end())
@@ -247,32 +258,37 @@ bool Http::Connect()
 	// Set SNI Hostname (many hosts need this to handshake successfully)
 	if (!SSL_set_tlsext_host_name(m_SslStream->native_handle(), API_HOST))
 	{
-		beast::error_code ec{ 
+		beast::error_code ec{
 			static_cast<int>(::ERR_get_error()),
 			asio::error::get_ssl_category() };
 		Logger::Get()->Log(samplog_LogLevel::ERROR,
 			"Can't set SNI hostname for Discord API URL: {} ({})",
 			ec.message(), ec.value());
+		logprintf(" >> discord-connector: can't set SNI hostname for discord.com");
 		return false;
 	}
 
 	// connect to REST API
 	asio::ip::tcp::resolver r{ m_IoService };
 	boost::system::error_code error;
-	auto target = r.resolve(API_HOST, "443", error);
+	auto target = r.resolve(asio::ip::tcp::resolver::query{ API_HOST, "443", asio::ip::tcp::v4() }, error);
+	if (error || target.empty())
+		target = r.resolve(asio::ip::tcp::resolver::query{ API_HOST, "443" }, error);
 	if (error)
 	{
 		Logger::Get()->Log(samplog_LogLevel::ERROR, "Can't resolve Discord API URL: {} ({})",
 			error.message(), error.value());
+		logprintf(" >> discord-connector: can't resolve discord.com: %s (%d)", error.message().c_str(), error.value());
 		return false;
 	}
 
-	beast::get_lowest_layer(*m_SslStream).expires_after(std::chrono::seconds(30));
+	beast::get_lowest_layer(*m_SslStream).expires_after(std::chrono::seconds(10));
 	beast::get_lowest_layer(*m_SslStream).connect(target, error);
 	if (error)
 	{
 		Logger::Get()->Log(samplog_LogLevel::ERROR, "Can't connect to Discord API: {} ({})",
 			error.message(), error.value());
+		logprintf(" >> discord-connector: can't connect to discord.com: %s (%d)", error.message().c_str(), error.value());
 		return false;
 	}
 
@@ -282,6 +298,7 @@ bool Http::Connect()
 	{
 		Logger::Get()->Log(samplog_LogLevel::ERROR, "Can't establish secured connection to Discord API: {} ({})",
 			error.message(), error.value());
+		logprintf(" >> discord-connector: TLS handshake with discord.com failed: %s (%d)", error.message().c_str(), error.value());
 		return false;
 	}
 

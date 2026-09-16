@@ -160,7 +160,6 @@ private:
 	std::map<CommandId_t, Command_t> m_Commands;
 	const unsigned int m_InitValue = 1;
 	std::atomic<unsigned int> m_Initialized{ 0 };
-	unsigned int m_InitGuilds = 0;
 public:
 	void Initialize();
 	void ParseOptionData(Command_t& command, nlohmann::json& option_json, CommandOption_t & parent_option = InvalidCommandOption);

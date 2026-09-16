@@ -9,6 +9,12 @@
 #include "CommandInteraction.hpp"
 #include "User.hpp"
 #include "Role.hpp"
+#include "sdk.hpp"
+
+#include <atomic>
+#include <memory>
+
+extern logprintf_t logprintf;
 
 Command::Command(Snowflake_t const& id, std::string const& name, std::string const& description, GuildId_t guild) :
 	m_ID(id),
@@ -151,50 +157,57 @@ void CommandManager::Initialize()
 		(void)data;
 		Network::Get()->Http().Get("/api/oauth2/applications/@me", [this](Http::Response r)
 		{
+			if (r.status != 200)
+			{
+				logprintf(" >> discord-connector: can't fetch application id: HTTP %u", r.status);
+				return;
+			}
+
 			json response = json::parse(r.body);
 			ThisBot::Get()->SetApplicationID(response.at("id"));
 
 			Network::Get()->Http().Get(fmt::format("/applications/{:s}/commands", ThisBot::Get()->GetApplicationID()), [this](Http::Response commandr)
 			{
-					if (commandr.status == 200)
+				if (commandr.status != 200)
+				{
+					logprintf(" >> discord-connector: can't fetch slash commands: HTTP %u", commandr.status);
+					return;
+				}
+
+				auto const guilds = GuildManager::Get()->GetGuilds();
+				auto pending = std::make_shared<std::atomic<unsigned int>>(
+					static_cast<unsigned int>(guilds.size()) + 1U);
+
+				auto finish = [this, commandr, pending]()
+				{
+					if (--(*pending) != 0 || m_Initialized >= m_InitValue)
+						return;
+
+					json commands = json::parse(commandr.body);
+					for (auto & command : commands.items())
+						ParseCommandCreationData(command.value());
+
+					m_Initialized++;
+				};
+
+				for (auto const & guild : guilds)
+				{
+					Network::Get()->Http().Get(fmt::format("/applications/{:s}/guilds/{:s}/commands",
+						ThisBot::Get()->GetApplicationID(),
+						GuildManager::Get()->FindGuild(guild)->GetId()),
+						[guild, finish](Http::Response guild_command)
 					{
-						m_InitGuilds = GuildManager::Get()->GetGuilds().size();
-						for (auto & guild : GuildManager::Get()->GetGuilds())
+						if (guild_command.status == 200)
 						{
-							Network::Get()->Http().Get(fmt::format("/applications/{:s}/guilds/{:s}/commands", ThisBot::Get()->GetApplicationID(), GuildManager::Get()->FindGuild(guild)->GetId()),
-								[this, guild, commandr](Http::Response guild_command)
-							{
-									if (guild_command.status == 200)
-									{
-										json commands = json::parse(guild_command.body);
-										for (auto & command : commands.items())
-										{
-											ParseCommandCreationData(command.value(), guild);
-										}
-									}
-									m_InitGuilds--;
-
-									if (!m_InitGuilds) {
-										json commands = json::parse(commandr.body);
-										for (auto& command : commands.items())
-										{
-											ParseCommandCreationData(command.value());
-										}
-										m_Initialized++;
-									}
-							});
-							if (!m_InitGuilds) {
-								json commands = json::parse(commandr.body);
-								for (auto& command : commands.items())
-								{
-									ParseCommandCreationData(command.value());
-								}
-								m_Initialized++;
-							}
+							json commands = json::parse(guild_command.body);
+							for (auto & command : commands.items())
+								ParseCommandCreationData(command.value(), guild);
 						}
+						finish();
+					});
+				}
 
-						
-					}
+				finish();
 			});
 		}, false);
 	});

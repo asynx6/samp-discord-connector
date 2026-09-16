@@ -1,5 +1,8 @@
 #include "Network.hpp"
 #include "Logger.hpp"
+#include "sdk.hpp"
+
+extern logprintf_t logprintf;
 
 
 void Network::Initialize(std::string const &token, int intents)
@@ -15,6 +18,10 @@ void Network::Initialize(std::string const &token, int intents)
 		{
 			Logger::Get()->Log(samplog_LogLevel::ERROR, "Can't retrieve Discord gateway URL: {} ({})",
 				res.reason, res.status);
+			if (res.status == 401)
+				logprintf(" >> discord-connector: Discord rejected the bot token (HTTP 401) - check discord_bot_token / DCC_BOT_TOKEN");
+			else
+				logprintf(" >> discord-connector: can't retrieve Discord gateway URL: %s (%u)", res.reason.c_str(), res.status);
 			return;
 		}
 		auto gateway_res = json::parse(res.body);

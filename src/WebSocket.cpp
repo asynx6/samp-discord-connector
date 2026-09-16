@@ -54,27 +54,47 @@ void WebSocket::Connect()
 			this));
 }
 
-void WebSocket::OnResolve(beast::error_code ec, 
+void WebSocket::OnResolve(beast::error_code ec,
 	asio::ip::tcp::resolver::results_type results)
 {
 	Logger::Get()->Log(samplog_LogLevel::DEBUG, "WebSocket::OnResolve");
 
 	if (ec)
 	{
-		Logger::Get()->Log(samplog_LogLevel::ERROR, 
+		Logger::Get()->Log(samplog_LogLevel::ERROR,
 			"Can't resolve Discord gateway URL '{}': {} ({})",
 			_gatewayUrl, ec.message(), ec.value());
+		logprintf(" >> discord-connector: can't resolve %s: %s (%d)", _gatewayUrl.c_str(), ec.message().c_str(), ec.value());
 		Disconnect(true);
 		return;
 	}
+
+	if (results.empty())
+	{
+		Logger::Get()->Log(samplog_LogLevel::ERROR,
+			"Discord gateway URL '{}' resolved to no addresses",
+			_gatewayUrl);
+		logprintf(" >> discord-connector: %s resolved to no addresses", _gatewayUrl.c_str());
+		Disconnect(true);
+		return;
+	}
+
+	// prefer IPv4, v6 routes in containers can blackhole
+	std::vector<asio::ip::tcp::endpoint> endpoints;
+	for (auto const& ep : results)
+		if (ep.endpoint().address().is_v4())
+			endpoints.push_back(ep.endpoint());
+	for (auto const& ep : results)
+		if (!ep.endpoint().address().is_v4())
+			endpoints.push_back(ep.endpoint());
 
 	_websocket.reset(
 		new WebSocketStream_t(asio::make_strand(_ioContext), _sslContext));
 
 	beast::get_lowest_layer(*_websocket).expires_after(
-		std::chrono::seconds(30));
+		std::chrono::seconds(10));
 	beast::get_lowest_layer(*_websocket).async_connect(
-		results, 
+		endpoints,
 		beast::bind_front_handler(
 			&WebSocket::OnConnect,
 			this));
@@ -89,14 +109,15 @@ void WebSocket::OnConnect(beast::error_code ec,
 
 	if (ec)
 	{
-		Logger::Get()->Log(samplog_LogLevel::ERROR, 
+		Logger::Get()->Log(samplog_LogLevel::ERROR,
 			"Can't connect to Discord gateway: {} ({})",
 			ec.message(), ec.value());
+		logprintf(" >> discord-connector: can't connect to Discord gateway: %s (%d)", ec.message().c_str(), ec.value());
 		Disconnect(true);
 		return;
 	}
 
-	beast::get_lowest_layer(*_websocket).expires_after(std::chrono::seconds(30));
+	beast::get_lowest_layer(*_websocket).expires_after(std::chrono::seconds(10));
 	_websocket->next_layer().async_handshake(
 		asio::ssl::stream_base::client, 
 		beast::bind_front_handler(
@@ -113,9 +134,12 @@ void WebSocket::OnSslHandshake(beast::error_code ec)
 		Logger::Get()->Log(samplog_LogLevel::ERROR,
 			"Can't establish secured connection to Discord gateway: {} ({})",
 			ec.message(), ec.value());
+		logprintf(" >> discord-connector: TLS handshake with Discord gateway failed: %s (%d)", ec.message().c_str(), ec.value());
 		Disconnect(true);
 		return;
 	}
+
+	m_HeartbeatTimer.cancel();
 
 	// websocket stream has its own timeout system
 	beast::get_lowest_layer(*_websocket).expires_never();
@@ -150,6 +174,7 @@ void WebSocket::OnHandshake(beast::error_code ec)
 		Logger::Get()->Log(samplog_LogLevel::ERROR,
 			"Can't upgrade to WSS protocol: {} ({})",
 			ec.message(), ec.value());
+		logprintf(" >> discord-connector: can't upgrade to WSS: %s (%d)", ec.message().c_str(), ec.value());
 		Disconnect(true);
 		return;
 	}
@@ -253,15 +278,20 @@ void WebSocket::OnRead(beast::error_code ec,
 	if (ec)
 	{
 		bool reconnect = false;
-		switch (ec.value())
+		if (ec == beast::websocket::error::closed || ec == asio::ssl::error::stream_errors::stream_truncated)
 		{
-		case asio::ssl::error::stream_errors::stream_truncated:
+			auto code = _websocket->reason().code;
 			Logger::Get()->Log(samplog_LogLevel::ERROR,
 				"Discord terminated websocket connection; reason: {} ({})",
 				_websocket->reason().reason.c_str(),
-				_websocket->reason().code);
+				code);
 
-			if (_websocket->reason().code == 4014)
+			if (code == 4004)
+			{
+				logprintf(" >> discord-connector: Discord rejected the bot token (4004). Check discord_bot_token / DCC_BOT_TOKEN.");
+				reconnect = false;
+			}
+			else if (code == 4013 || code == 4014)
 			{
 				logprintf(" >> discord-connector: bot could not connect due to intent permissions. Modify your discord bot settings and enable every intent.");
 				reconnect = false;
@@ -270,17 +300,18 @@ void WebSocket::OnRead(beast::error_code ec,
 			{
 				reconnect = true;
 			}
-			break;
-		case asio::error::operation_aborted:
+		}
+		else if (ec == asio::error::operation_aborted)
+		{
 			// connection was closed, do nothing
-			break;
-		default:
+		}
+		else
+		{
 			Logger::Get()->Log(samplog_LogLevel::ERROR,
 				"Can't read from Discord websocket gateway: {} ({})",
 				ec.message(),
 				ec.value());
 			reconnect = true;
-			break;
 		}
 
 		if (reconnect)
@@ -292,8 +323,19 @@ void WebSocket::OnRead(beast::error_code ec,
 		return;
 	}
 
-	json result = json::parse(
-		beast::buffers_to_string(_buffer.data()));
+	json result;
+	try
+	{
+		result = json::parse(beast::buffers_to_string(_buffer.data()));
+	}
+	catch (std::exception const &e)
+	{
+		Logger::Get()->Log(samplog_LogLevel::ERROR,
+			"can't parse gateway payload: {} -- reconnecting", e.what());
+		_buffer.clear();
+		Disconnect(true);
+		return;
+	}
 	_buffer.clear();
 
 	int payload_opcode = result["op"].get<int>();
@@ -383,7 +425,11 @@ void WebSocket::OnRead(beast::error_code ec,
 			Event event = it->second;
 
 			if (event == Event::READY)
+			{
 				m_SessionId = data["session_id"].get<std::string>();
+				_invalidSessions = 0;
+				_warnedBadSession = false;
+			}
 
 			auto event_range = m_EventMap.equal_range(event);
 			for (auto ev_it = event_range.first; ev_it != event_range.second; ++ev_it)
@@ -401,6 +447,11 @@ void WebSocket::OnRead(beast::error_code ec,
 		Disconnect(true);
 		return;
 	case 9: // invalid session
+		if (++_invalidSessions >= 3 && !_warnedBadSession)
+		{
+			_warnedBadSession = true;
+			logprintf(" >> discord-connector: gateway keeps invalidating our session; most likely the bot token or the intents are not accepted.");
+		}
 		Identify();
 		break;
 	case 10: // hello
