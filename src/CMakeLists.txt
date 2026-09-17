@@ -72,7 +72,7 @@ if (UNIX)
 	target_sources(discord-connector PUBLIC ${SAMPSDK_DIR}/amx/getch.c)
 endif()
 
-set_property(TARGET discord-connector PROPERTY CXX_STANDARD 14)
+set_property(TARGET discord-connector PROPERTY CXX_STANDARD 17)
 set_property(TARGET discord-connector PROPERTY CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)

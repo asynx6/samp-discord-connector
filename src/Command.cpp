@@ -1,4 +1,5 @@
 #include "Command.hpp"
+#include <functional>
 #include "Network.hpp"
 #include "PawnDispatcher.hpp"
 #include "Callback.hpp"
@@ -178,7 +179,7 @@ void CommandManager::Initialize()
 				auto pending = std::make_shared<std::atomic<unsigned int>>(
 					static_cast<unsigned int>(guilds.size()) + 1U);
 
-				auto finish = [this, commandr, pending]()
+				auto finish_body = [this, commandr, pending]() mutable
 				{
 					if (--(*pending) != 0 || m_Initialized >= m_InitValue)
 						return;
@@ -189,13 +190,14 @@ void CommandManager::Initialize()
 
 					m_Initialized++;
 				};
+				std::function<void()> finish = finish_body;
 
 				for (auto const & guild : guilds)
 				{
 					Network::Get()->Http().Get(fmt::format("/applications/{:s}/guilds/{:s}/commands",
 						ThisBot::Get()->GetApplicationID(),
 						GuildManager::Get()->FindGuild(guild)->GetId()),
-						[guild, finish](Http::Response guild_command)
+						[this, guild, finish](Http::Response guild_command)
 					{
 						if (guild_command.status == 200)
 						{

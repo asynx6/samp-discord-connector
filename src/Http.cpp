@@ -271,9 +271,9 @@ bool Http::Connect()
 	// connect to REST API
 	asio::ip::tcp::resolver r{ m_IoService };
 	boost::system::error_code error;
-	auto target = r.resolve(asio::ip::tcp::resolver::query{ API_HOST, "443", asio::ip::tcp::v4() }, error);
+	auto target = r.resolve(asio::ip::tcp::v4(), API_HOST, "443", error);
 	if (error || target.empty())
-		target = r.resolve(asio::ip::tcp::resolver::query{ API_HOST, "443" }, error);
+		target = r.resolve(API_HOST, "443", error);
 	if (error)
 	{
 		Logger::Get()->Log(samplog_LogLevel::ERROR, "Can't resolve Discord API URL: {} ({})",
