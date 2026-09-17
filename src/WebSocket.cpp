@@ -1,5 +1,6 @@
 #include "WebSocket.hpp"
 #include "Logger.hpp"
+#include "Bot.hpp"
 #include "sdk.hpp"
 
 #include <unordered_map>
@@ -429,6 +430,9 @@ void WebSocket::OnRead(beast::error_code ec,
 				m_SessionId = data["session_id"].get<std::string>();
 				_invalidSessions = 0;
 				_warnedBadSession = false;
+				auto const &ready_user = data.find("user");
+				if (ready_user != data.end() && ready_user->find("username") != ready_user->end())
+					ThisBot::Get()->SetUsername((*ready_user)["username"].get<std::string>());
 			}
 
 			auto event_range = m_EventMap.equal_range(event);

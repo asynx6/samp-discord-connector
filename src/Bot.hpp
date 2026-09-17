@@ -31,7 +31,18 @@ private:
 	std::string m_ActivityName;
 	ChannelId_t m_CreatedChannelId = INVALID_CHANNEL_ID;
 	Snowflake_t m_ApplicationID;
+	std::string m_Username;
 public:
+	void SetUsername(std::string const &username)
+	{
+		m_Username = username;
+	}
+
+	std::string const &GetUsername() const
+	{
+		return m_Username;
+	}
+
 	void TriggerTypingIndicator(Channel_t const &channel);
 	void SetNickname(Guild_t const &guild, std::string const &nickname);
 

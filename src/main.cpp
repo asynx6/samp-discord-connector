@@ -2,6 +2,7 @@
 #include "natives.hpp"
 #include "PawnDispatcher.hpp"
 #include "Network.hpp"
+#include "Bot.hpp"
 #include "Guild.hpp"
 #include "User.hpp"
 #include "Channel.hpp"
@@ -127,6 +128,8 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData)
 		if (WaitForInitialization())
 		{
 			logprintf(" >> discord-connector: " PLUGIN_VERSION " successfully loaded.");
+			if (!ThisBot::Get()->GetUsername().empty())
+				logprintf(" >> discord-connector: logged in as bot \"%s\".", ThisBot::Get()->GetUsername().c_str());
 		}
 		else
 		{
@@ -358,7 +361,7 @@ class DiscordComponent : public IComponent, public PawnEventHandler, public Core
 
 	SemanticVersion componentVersion() const override
 	{
-		return SemanticVersion(0, 3, 6, 1);
+		return SemanticVersion(0, 3, 7, 0);
 	}
 
 	void onLoad(ICore* c) override
@@ -418,6 +421,8 @@ class DiscordComponent : public IComponent, public PawnEventHandler, public Core
 			if (WaitForInitialization())
 			{
 				logprintf(" >> discord-connector: " PLUGIN_VERSION " successfully loaded.");
+			if (!ThisBot::Get()->GetUsername().empty())
+				logprintf(" >> discord-connector: logged in as bot \"%s\".", ThisBot::Get()->GetUsername().c_str());
 			}
 			else
 			{
