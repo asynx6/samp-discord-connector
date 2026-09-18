@@ -52,8 +52,16 @@ jobs:
       run: echo "REPO_TAG=$(git describe --tags --always)" >> $GITHUB_ENV
       shell: bash
     
-    - name: get-cmake
-      uses: lukka/get-cmake@v3.23.0
+    - name: Install CMake (Windows)
+      if: runner.os == 'Windows'
+      uses: lukka/get-cmake@latest
+      continue-on-error: true
+    
+    - name: Install CMake (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake
 
     - if: runner.os == 'Windows'
       name: Install boost
