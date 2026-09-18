@@ -104,13 +104,17 @@ jobs:
       with:
         python-version: 3.9.0 # SemVer's version range syntax
 
-    - name: Install conan 1.x
+    - name: Install conan 1.x and Ninja
       run: |
         python -m pip install --upgrade pip
         pip install 'conan<2'
+        choco install ninja --no-progress || echo "Ninja install via choco failed"
         # Create Conan profile with v142 toolset for MSVC 19.5x compatibility
         conan profile new default --detect || true
         conan profile update settings.compiler.toolset=v142 default
+        conan profile update settings.compiler.version=17 default
+        # Force CMake generator to Ninja (avoids VS version detection issues with MSVC 19.5x)
+        conan profile update 'env.CONAN_CMAKE_GENERATOR=Ninja' default || true
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
