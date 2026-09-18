@@ -53,9 +53,11 @@ jobs:
       run: echo "REPO_TAG=$(git describe --tags --always)" >> $GITHUB_ENV
       shell: bash
     
-    - name: Install CMake (Windows)
+    - name: Install CMake 3.28 (Windows)
       if: runner.os == 'Windows'
       uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: 3.28.6
       continue-on-error: true
     
     - name: Install CMake (Linux)
