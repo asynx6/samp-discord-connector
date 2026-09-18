@@ -79,11 +79,17 @@ jobs:
 
     - if: runner.os == 'Windows'
       name: Install openssl
-      run: choco install openssl --forcex86 | out-null
-      
+      run: |
+        $Url = "https://slproweb.com/download/Win32OpenSSL-1_1_1w.exe"
+        $Out = "$env:TEMP\openssl.exe"
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        (New-Object System.Net.WebClient).DownloadFile($Url, $Out)
+        Start-Process -Wait -FilePath $Out "/SILENT","/SP-","/SUPPRESSMSGBOXES","/DIR=C:\\OpenSSL-Win32"
+
     - if: runner.os == 'Windows'
       name: Setup openssl envvar
-      run: echo "OPENSSL_ROOT=C:\\Program Files (x86)\\OpenSSL-Win32" >> $GITHUB_ENV
+      run: echo "OPENSSL_ROOT=C:\\OpenSSL-Win32" >> $GITHUB_ENV
+      shell: bash
       
     - if: runner.os == 'Linux'
       name: Install gcc/g++-multilib
