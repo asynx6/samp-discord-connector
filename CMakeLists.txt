@@ -30,11 +30,18 @@ include(libs/cmake-conan/conan.cmake)
 function(add_conan_lib pkg_name conan_pkg)
 	conan_check(REQUIRED)
 
+	# Override compiler toolset for newer MSVC versions (v145 not supported by Conan 1.x)
+	set(_CONAN_SETTINGS_LIST "")
+	if(MSVC AND MSVC_VERSION GREATER_EQUAL 1940)
+		list(APPEND _CONAN_SETTINGS_LIST compiler.toolset=v142)
+	endif()
+
 	conan_cmake_run(
 		REQUIRES ${conan_pkg}
 		ARCH x86
 		BASIC_SETUP CMAKE_TARGETS
 		BUILD missing
+		SETTINGS ${_CONAN_SETTINGS_LIST}
 	)
 
 	set_target_properties(${pkg_name} PROPERTIES IMPORTED_GLOBAL TRUE)
