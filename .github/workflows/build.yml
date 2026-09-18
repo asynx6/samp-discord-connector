@@ -34,7 +34,7 @@ jobs:
         build-type: [Debug, Release]
         include:
           - os: windows-latest
-            cmake-args: '-G"Visual Studio 18 2026" -AWin32 -Thost=x86 -DGH_ACBUILD=TRUE  -DUSING_BOOST_NO_CONAN=TRUE -DUSING_OPENSSL_NO_CONAN=TRUE -DBoost_NO_BOOST_CMAKE=ON -DCONAN_SKIP_FMT=ON'
+            cmake-args: '-G"Visual Studio 17 2022" -AWin32 -Thost=x86 -DGH_ACBUILD=TRUE  -DUSING_BOOST_NO_CONAN=TRUE -DUSING_OPENSSL_NO_CONAN=TRUE -DBoost_NO_BOOST_CMAKE=ON -DCONAN_SKIP_FMT=ON'
           - os: ubuntu-20.04
             cmake-args: '-DCMAKE_CXX_FLAGS=-m32 -DCMAKE_C_FLAGS=-m32 -DGH_ACBUILD=TRUE -DCONAN_SKIP_FMT=ON'
 
