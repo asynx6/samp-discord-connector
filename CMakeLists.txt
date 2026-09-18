@@ -30,9 +30,10 @@ include(libs/cmake-conan/conan.cmake)
 function(add_conan_lib pkg_name conan_pkg)
 	conan_check(REQUIRED)
 
-	# Override compiler toolset for newer MSVC versions (v145 not supported by Conan 1.x)
+	# Override compiler version and toolset for newer MSVC versions (Conan 1.x doesn't support v18+/v145)
 	set(_CONAN_SETTINGS_LIST "")
 	if(MSVC AND MSVC_VERSION GREATER_EQUAL 1940)
+		list(APPEND _CONAN_SETTINGS_LIST compiler.version=17)
 		list(APPEND _CONAN_SETTINGS_LIST compiler.toolset=v142)
 	endif()
 
