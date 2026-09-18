@@ -64,12 +64,11 @@ jobs:
         sudo apt-get install -y cmake
 
     - if: runner.os == 'Windows'
-      name: Install boost
+      name: Install boost (from archives.boost.io)
       run: |
-        $Url = "https://sourceforge.net/projects/boost/files/boost-binaries/1.73.0/boost_1_73_0-msvc-14.2-64.exe/download"
+        $Url = "https://archives.boost.io/release/1.73.0/binaries/boost_1_73_0-msvc-14.2-64.exe"
         $Out = "$env:TEMP\boost.exe"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        (New-Object System.Net.WebClient).Headers.Add("User-Agent", "Wget/1.21.1")
         (New-Object System.Net.WebClient).DownloadFile($Url, $Out)
         Start-Process -Wait -FilePath $Out "/SILENT","/SP-","/SUPPRESSMSGBOXES","/DIR=C:\\hostedtoolcache\\windows\\Boost"
 
