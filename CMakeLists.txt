@@ -99,7 +99,12 @@ else()
 endif()
 
 set(CONAN_HAS_FMT TRUE CACHE INTERNAL FALSE)
-add_conan_lib(CONAN_PKG::fmt fmt/7.1.3)
+if(NOT DEFINED CONAN_SKIP_FMT)
+	add_conan_lib(CONAN_PKG::fmt fmt/7.1.3)
+else()
+	# Use libs/fmt submodule directly when CONAN_SKIP_FMT is set
+	add_subdirectory(libs/fmt)
+endif()
 
 if(USING_OPENSSL_NO_CONAN)
 	if(NOT DEFINED OPENSSL_USE_STATIC_LIBS)
